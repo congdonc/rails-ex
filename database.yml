@@ -1,0 +1,37 @@
+# PostgreSQL 16/17 — required by OpenProject 17.
+# Versions 13-15 are NOT officially supported by OpenProject 17.
+#
+# Connection values are read from environment variables so this file
+# works both on OpenShift (S2I) and as a manual / Docker installation.
+
+<% user     = ENV.key?("POSTGRESQL_ADMIN_PASSWORD") ? "root" : ENV["POSTGRESQL_USER"] %>
+<% password = ENV.key?("POSTGRESQL_ADMIN_PASSWORD") ? ENV["POSTGRESQL_ADMIN_PASSWORD"] : ENV["POSTGRESQL_PASSWORD"] %>
+<% db_service = ENV.fetch("DATABASE_SERVICE_NAME", "").upcase %>
+
+default: &default
+  adapter: postgresql
+  encoding: unicode
+  # pool size — respect OpenProject's RAILS_MAX_THREADS convention
+  pool: <%= ENV.fetch("RAILS_MAX_THREADS") { ENV["POSTGRESQL_MAX_CONNECTIONS"] || 5 } %>
+  username: <%= user %>
+  password: <%= password %>
+  host: <%= ENV["#{db_service}_SERVICE_HOST"] %>
+  port: <%= ENV["#{db_service}_SERVICE_PORT"] || 5432 %>
+  database: <%= ENV["POSTGRESQL_DATABASE"] %>
+  # Required PostgreSQL extensions used by OpenProject 17:
+  #   pg_trgm, btree_gist, unaccent
+  # These must be available in the PostgreSQL server; they are installed
+  # automatically by OpenProject's db:migrate rake task.
+
+development:
+  <<: *default
+
+# NOTE: SQLite is intentionally removed — OpenProject 17 requires PostgreSQL.
+# The original rails-ex used SQLite for the test environment; this has been
+# replaced with a PostgreSQL test database to match OpenProject's requirements.
+test:
+  <<: *default
+  database: <%= ENV.fetch("POSTGRESQL_DATABASE", "openproject_test") %>_test
+
+production:
+  <<: *default

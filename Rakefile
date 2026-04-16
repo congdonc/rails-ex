@@ -1,5 +1,5 @@
-# Add your own tasks in files placed in lib/tasks ending in .rake,
-# for example lib/tasks/capistrano.rake, and they will automatically be available to Rake.
+# Rakefile — updated for Rails 8 / OpenProject 17
+# Rails 8 ships its own task loader; no additional requires needed.
 
 require_relative 'config/application'
 

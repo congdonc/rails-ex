@@ -1,0 +1,580 @@
+{
+  "kind": "Template",
+  "apiVersion": "template.openshift.io/v1",
+  "metadata": {
+    "name": "rails-postgresql-openproject17",
+    "annotations": {
+      "openshift.io/display-name": "Rails + PostgreSQL (OpenProject 17)",
+      "description": "An example Rails application with a PostgreSQL database, updated for OpenProject 17 compatibility (Ruby 3.4, Rails 8, PostgreSQL 17, Node.js 22, Puma 6.5+).",
+      "tags": "quickstart,ruby,rails,postgresql,openproject",
+      "iconClass": "icon-ruby"
+    }
+  },
+  "labels": {
+    "template": "rails-postgresql-openproject17"
+  },
+  "objects": [
+    {
+      "kind": "Secret",
+      "apiVersion": "v1",
+      "metadata": {
+        "name": "${NAME}"
+      },
+      "stringData": {
+        "database-user": "${DATABASE_USER}",
+        "database-password": "${DATABASE_PASSWORD}",
+        "application-user": "${APPLICATION_USER}",
+        "application-password": "${APPLICATION_PASSWORD}",
+        "keybase": "${SECRET_KEY_BASE}"
+      }
+    },
+    {
+      "kind": "Service",
+      "apiVersion": "v1",
+      "metadata": {
+        "name": "${NAME}",
+        "annotations": {
+          "description": "Exposes and load balances the application pods"
+        }
+      },
+      "spec": {
+        "ports": [
+          {
+            "name": "web",
+            "port": 8080,
+            "targetPort": 8080
+          }
+        ],
+        "selector": {
+          "name": "${NAME}"
+        }
+      }
+    },
+    {
+      "kind": "Route",
+      "apiVersion": "route.openshift.io/v1",
+      "metadata": {
+        "name": "${NAME}"
+      },
+      "spec": {
+        "host": "${APPLICATION_DOMAIN}",
+        "to": {
+          "kind": "Service",
+          "name": "${NAME}"
+        }
+      }
+    },
+    {
+      "kind": "ImageStream",
+      "apiVersion": "image.openshift.io/v1",
+      "metadata": {
+        "name": "${NAME}",
+        "annotations": {
+          "description": "Keeps track of changes in the application image"
+        }
+      }
+    },
+    {
+      "kind": "BuildConfig",
+      "apiVersion": "build.openshift.io/v1",
+      "metadata": {
+        "name": "${NAME}",
+        "annotations": {
+          "description": "Defines how to build the application",
+          "template.alpha.openshift.io/wait-for-ready": "true"
+        }
+      },
+      "spec": {
+        "source": {
+          "type": "Git",
+          "git": {
+            "uri": "${SOURCE_REPOSITORY_URL}",
+            "ref": "${SOURCE_REPOSITORY_REF}"
+          },
+          "contextDir": "${CONTEXT_DIR}"
+        },
+        "strategy": {
+          "type": "Source",
+          "sourceStrategy": {
+            "from": {
+              "kind": "ImageStreamTag",
+              "namespace": "${NAMESPACE}",
+              "name": "ruby:3.4"
+            },
+            "env": [
+              {
+                "name": "RUBYGEM_MIRROR",
+                "value": "${RUBYGEM_MIRROR}"
+              }
+            ]
+          }
+        },
+        "output": {
+          "to": {
+            "kind": "ImageStreamTag",
+            "name": "${NAME}:latest"
+          }
+        },
+        "triggers": [
+          {
+            "type": "ImageChange"
+          },
+          {
+            "type": "ConfigChange"
+          },
+          {
+            "type": "GitHub",
+            "github": {
+              "secret": "${GITHUB_WEBHOOK_SECRET}"
+            }
+          }
+        ],
+        "postCommit": {
+          "script": "bundle exec rake test"
+        }
+      }
+    },
+    {
+      "kind": "DeploymentConfig",
+      "apiVersion": "apps.openshift.io/v1",
+      "metadata": {
+        "name": "${NAME}",
+        "annotations": {
+          "description": "Defines how to deploy the application server",
+          "template.alpha.openshift.io/wait-for-ready": "true"
+        }
+      },
+      "spec": {
+        "strategy": {
+          "type": "Recreate"
+        },
+        "triggers": [
+          {
+            "type": "ImageChange",
+            "imageChangeParams": {
+              "automatic": true,
+              "containerNames": ["rails-postgresql-openproject17"],
+              "from": {
+                "kind": "ImageStreamTag",
+                "name": "${NAME}:latest"
+              }
+            }
+          },
+          {
+            "type": "ConfigChange"
+          }
+        ],
+        "replicas": 1,
+        "selector": {
+          "name": "${NAME}"
+        },
+        "template": {
+          "metadata": {
+            "name": "${NAME}",
+            "labels": {
+              "name": "${NAME}"
+            }
+          },
+          "spec": {
+            "containers": [
+              {
+                "name": "rails-postgresql-openproject17",
+                "image": " ",
+                "ports": [
+                  {
+                    "containerPort": 8080
+                  }
+                ],
+                "readinessProbe": {
+                  "timeoutSeconds": 3,
+                  "initialDelaySeconds": 5,
+                  "httpGet": {
+                    "path": "/articles",
+                    "port": 8080
+                  }
+                },
+                "livenessProbe": {
+                  "timeoutSeconds": 3,
+                  "initialDelaySeconds": 10,
+                  "httpGet": {
+                    "path": "/articles",
+                    "port": 8080
+                  }
+                },
+                "env": [
+                  {
+                    "name": "DATABASE_SERVICE_NAME",
+                    "value": "${DATABASE_SERVICE_NAME}"
+                  },
+                  {
+                    "name": "POSTGRESQL_USER",
+                    "valueFrom": {
+                      "secretKeyRef": {
+                        "name": "${NAME}",
+                        "key": "database-user"
+                      }
+                    }
+                  },
+                  {
+                    "name": "POSTGRESQL_PASSWORD",
+                    "valueFrom": {
+                      "secretKeyRef": {
+                        "name": "${NAME}",
+                        "key": "database-password"
+                      }
+                    }
+                  },
+                  {
+                    "name": "POSTGRESQL_DATABASE",
+                    "value": "${DATABASE_NAME}"
+                  },
+                  {
+                    "name": "SECRET_KEY_BASE",
+                    "valueFrom": {
+                      "secretKeyRef": {
+                        "name": "${NAME}",
+                        "key": "keybase"
+                      }
+                    }
+                  },
+                  {
+                    "name": "POSTGRESQL_MAX_CONNECTIONS",
+                    "value": "${POSTGRESQL_MAX_CONNECTIONS}"
+                  },
+                  {
+                    "name": "POSTGRESQL_SHARED_BUFFERS",
+                    "value": "${POSTGRESQL_SHARED_BUFFERS}"
+                  },
+                  {
+                    "name": "APPLICATION_DOMAIN",
+                    "value": "${APPLICATION_DOMAIN}"
+                  },
+                  {
+                    "name": "APPLICATION_USER",
+                    "valueFrom": {
+                      "secretKeyRef": {
+                        "name": "${NAME}",
+                        "key": "application-user"
+                      }
+                    }
+                  },
+                  {
+                    "name": "APPLICATION_PASSWORD",
+                    "valueFrom": {
+                      "secretKeyRef": {
+                        "name": "${NAME}",
+                        "key": "application-password"
+                      }
+                    }
+                  },
+                  {
+                    "name": "RAILS_ENV",
+                    "value": "${RAILS_ENV}"
+                  },
+                  {
+                    "name": "RAILS_MAX_THREADS",
+                    "value": "${RAILS_MAX_THREADS}"
+                  },
+                  {
+                    "name": "WEB_CONCURRENCY",
+                    "value": "${WEB_CONCURRENCY}"
+                  }
+                ],
+                "resources": {
+                  "limits": {
+                    "memory": "${MEMORY_LIMIT}"
+                  }
+                }
+              }
+            ]
+          }
+        }
+      }
+    },
+    {
+      "kind": "Service",
+      "apiVersion": "v1",
+      "metadata": {
+        "name": "${DATABASE_SERVICE_NAME}",
+        "annotations": {
+          "description": "Exposes the database server"
+        }
+      },
+      "spec": {
+        "ports": [
+          {
+            "name": "postgresql",
+            "port": 5432,
+            "targetPort": 5432
+          }
+        ],
+        "selector": {
+          "name": "${DATABASE_SERVICE_NAME}"
+        }
+      }
+    },
+    {
+      "kind": "DeploymentConfig",
+      "apiVersion": "apps.openshift.io/v1",
+      "metadata": {
+        "name": "${DATABASE_SERVICE_NAME}",
+        "annotations": {
+          "description": "Defines how to deploy the database",
+          "template.alpha.openshift.io/wait-for-ready": "true"
+        }
+      },
+      "spec": {
+        "strategy": {
+          "type": "Recreate"
+        },
+        "triggers": [
+          {
+            "type": "ImageChange",
+            "imageChangeParams": {
+              "automatic": true,
+              "containerNames": ["postgresql"],
+              "from": {
+                "kind": "ImageStreamTag",
+                "namespace": "${NAMESPACE}",
+                "name": "postgresql:17"
+              }
+            }
+          },
+          {
+            "type": "ConfigChange"
+          }
+        ],
+        "replicas": 1,
+        "selector": {
+          "name": "${DATABASE_SERVICE_NAME}"
+        },
+        "template": {
+          "metadata": {
+            "name": "${DATABASE_SERVICE_NAME}",
+            "labels": {
+              "name": "${DATABASE_SERVICE_NAME}"
+            }
+          },
+          "spec": {
+            "volumes": [
+              {
+                "name": "${DATABASE_SERVICE_NAME}-data",
+                "emptyDir": {}
+              }
+            ],
+            "containers": [
+              {
+                "name": "postgresql",
+                "image": " ",
+                "ports": [
+                  {
+                    "containerPort": 5432
+                  }
+                ],
+                "volumeMounts": [
+                  {
+                    "name": "${DATABASE_SERVICE_NAME}-data",
+                    "mountPath": "/var/lib/pgsql/data"
+                  }
+                ],
+                "env": [
+                  {
+                    "name": "POSTGRESQL_USER",
+                    "valueFrom": {
+                      "secretKeyRef": {
+                        "name": "${NAME}",
+                        "key": "database-user"
+                      }
+                    }
+                  },
+                  {
+                    "name": "POSTGRESQL_PASSWORD",
+                    "valueFrom": {
+                      "secretKeyRef": {
+                        "name": "${NAME}",
+                        "key": "database-password"
+                      }
+                    }
+                  },
+                  {
+                    "name": "POSTGRESQL_DATABASE",
+                    "value": "${DATABASE_NAME}"
+                  },
+                  {
+                    "name": "POSTGRESQL_MAX_CONNECTIONS",
+                    "value": "${POSTGRESQL_MAX_CONNECTIONS}"
+                  },
+                  {
+                    "name": "POSTGRESQL_SHARED_BUFFERS",
+                    "value": "${POSTGRESQL_SHARED_BUFFERS}"
+                  }
+                ],
+                "readinessProbe": {
+                  "timeoutSeconds": 1,
+                  "initialDelaySeconds": 5,
+                  "exec": {
+                    "command": ["/usr/libexec/check-container"]
+                  }
+                },
+                "livenessProbe": {
+                  "timeoutSeconds": 10,
+                  "initialDelaySeconds": 120,
+                  "exec": {
+                    "command": ["/usr/libexec/check-container", "--live"]
+                  }
+                },
+                "resources": {
+                  "limits": {
+                    "memory": "${MEMORY_POSTGRESQL_LIMIT}"
+                  }
+                }
+              }
+            ]
+          }
+        }
+      }
+    }
+  ],
+  "parameters": [
+    {
+      "name": "NAME",
+      "displayName": "Name",
+      "description": "The name assigned to all of the frontend objects defined in this template.",
+      "required": true,
+      "value": "rails-postgresql-openproject17"
+    },
+    {
+      "name": "NAMESPACE",
+      "displayName": "Namespace",
+      "description": "The OpenShift Namespace where the ImageStream resides.",
+      "required": true,
+      "value": "openshift"
+    },
+    {
+      "name": "MEMORY_LIMIT",
+      "displayName": "Memory Limit",
+      "description": "Maximum amount of memory the Rails container can use. Minimum 512Mi recommended for OpenProject 17.",
+      "required": true,
+      "value": "512Mi"
+    },
+    {
+      "name": "MEMORY_POSTGRESQL_LIMIT",
+      "displayName": "Memory Limit (PostgreSQL)",
+      "description": "Maximum amount of memory the PostgreSQL container can use.",
+      "required": true,
+      "value": "512Mi"
+    },
+    {
+      "name": "SOURCE_REPOSITORY_URL",
+      "displayName": "Git Repository URL",
+      "description": "The URL of the repository with your application source code.",
+      "required": true,
+      "value": "https://github.com/sclorg/rails-ex.git"
+    },
+    {
+      "name": "SOURCE_REPOSITORY_REF",
+      "displayName": "Git Reference",
+      "description": "Set this to a branch name, tag or other ref of your repository if you are not using the default branch.",
+      "value": ""
+    },
+    {
+      "name": "CONTEXT_DIR",
+      "displayName": "Context Directory",
+      "description": "Set this to the relative path to your project if it is not in the root of your repository.",
+      "value": ""
+    },
+    {
+      "name": "APPLICATION_DOMAIN",
+      "displayName": "Application Hostname",
+      "description": "The exposed hostname that will route to the Rails service, if left blank a value will be defaulted.",
+      "value": ""
+    },
+    {
+      "name": "GITHUB_WEBHOOK_SECRET",
+      "displayName": "GitHub Webhook Secret",
+      "description": "Github trigger secret. A difficult to guess string encoded as part of the webhook URL.",
+      "generate": "expression",
+      "from": "[a-zA-Z0-9]{40}"
+    },
+    {
+      "name": "SECRET_KEY_BASE",
+      "displayName": "Secret Key Base",
+      "description": "Your secret key for verifying the integrity of signed cookies.",
+      "generate": "expression",
+      "from": "[a-z0-9]{127}"
+    },
+    {
+      "name": "APPLICATION_USER",
+      "displayName": "Application Username",
+      "description": "The application user that is used within the sample application to authorize access on pages.",
+      "required": true,
+      "value": "openshift"
+    },
+    {
+      "name": "APPLICATION_PASSWORD",
+      "displayName": "Application Password",
+      "description": "The application password that is used within the sample application to authorize access on pages.",
+      "required": true,
+      "value": "secret"
+    },
+    {
+      "name": "RAILS_ENV",
+      "displayName": "Rails Environment",
+      "description": "Environment under which the sample application will run. Could be set to production, development or test.",
+      "required": true,
+      "value": "production"
+    },
+    {
+      "name": "RAILS_MAX_THREADS",
+      "displayName": "Rails Max Threads (Puma)",
+      "description": "Maximum number of threads per Puma worker. OpenProject 17 default is 5.",
+      "value": "5"
+    },
+    {
+      "name": "WEB_CONCURRENCY",
+      "displayName": "Puma Workers (WEB_CONCURRENCY)",
+      "description": "Number of Puma worker processes. Requires more RAM per worker.",
+      "value": "2"
+    },
+    {
+      "name": "DATABASE_SERVICE_NAME",
+      "displayName": "Database Service Name",
+      "required": true,
+      "value": "postgresql"
+    },
+    {
+      "name": "DATABASE_USER",
+      "displayName": "Database Username",
+      "generate": "expression",
+      "from": "user[A-Z0-9]{3}"
+    },
+    {
+      "name": "DATABASE_PASSWORD",
+      "displayName": "Database Password",
+      "generate": "expression",
+      "from": "[a-zA-Z0-9]{16}"
+    },
+    {
+      "name": "DATABASE_NAME",
+      "displayName": "Database Name",
+      "required": true,
+      "value": "root"
+    },
+    {
+      "name": "POSTGRESQL_MAX_CONNECTIONS",
+      "displayName": "Maximum Database Connections",
+      "value": "100"
+    },
+    {
+      "name": "POSTGRESQL_SHARED_BUFFERS",
+      "displayName": "Shared Buffer Amount",
+      "value": "12MB"
+    },
+    {
+      "name": "RUBYGEM_MIRROR",
+      "displayName": "Custom RubyGems Mirror URL",
+      "description": "The custom RubyGems mirror URL. Leave this empty to use the default mirror.",
+      "value": ""
+    }
+  ]
+}

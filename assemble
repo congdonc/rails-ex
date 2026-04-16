@@ -1,0 +1,57 @@
+#!/bin/bash -e
+#
+# S2I assemble script — updated for OpenProject 17
+#
+# Ruby  : 3.4.x  (OpenProject 17 requirement)
+# Node  : 22.x   (OpenProject 17 requirement)
+# PG    : 16/17  (OpenProject 17 requirement)
+# Rails : 8.x
+#
+# The 'assemble' script builds the application artifacts from a source and
+# places them into appropriate directories inside the image.
+
+# If the rails-app assemble script is executed with the '-h' flag, print the
+# usage.
+if [[ "$1" == "-h" ]]; then
+	exec /usr/libexec/s2i/usage
+fi
+
+# Restore artifacts from the previous build (if they exist).
+if [ "$(ls /tmp/artifacts/ 2>/dev/null)" ]; then
+  echo "---> Restoring build artifacts..."
+  mv /tmp/artifacts/vendor /tmp/app/vendor 2>/dev/null || true
+fi
+
+echo "---> Installing application source..."
+cp -Rf /tmp/src/. ./
+
+echo "---> Ruby version check..."
+ruby --version
+
+echo "---> Node.js version check (required for OpenProject 17 asset compilation)..."
+node --version || echo "WARNING: Node.js not found; asset pre-compilation may fail."
+npm --version  || echo "WARNING: npm not found."
+
+echo "---> Building your Ruby application from source..."
+if [ -f Gemfile.lock ]; then
+  echo "---> Running 'bundle install --deployment' ..."
+  bundle install --deployment --without development:test
+else
+  echo "---> Running 'bundle install' ..."
+  bundle install --without development:test
+fi
+
+# Precompile assets
+# DISABLE_ASSET_COMPILATION=true skips this step (set in BuildConfig env)
+if [ "${DISABLE_ASSET_COMPILATION}" != "true" ]; then
+  echo "---> Precompiling assets..."
+  bundle exec rake assets:precompile RAILS_ENV=production RAILS_RELATIVE_URL_ROOT=${RAILS_RELATIVE_URL_ROOT}
+fi
+
+echo "---> Cleaning up unused assets..."
+bundle exec rake assets:clean RAILS_ENV=production || true
+
+# Remove git history to reduce image size
+if [ -d .git ]; then
+  rm -rf .git
+fi

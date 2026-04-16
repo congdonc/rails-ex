@@ -1,0 +1,24 @@
+#!/bin/bash -e
+#
+# S2I run script — updated for OpenProject 17 / Puma 6.5+
+#
+# Puma is the only supported application server for OpenProject 17.
+# Thin / Unicorn / Passenger are not supported.
+
+echo "---> Starting the OpenProject-compatible Rails application with Puma..."
+echo "---> Ruby: $(ruby --version)"
+echo "---> Bundler: $(bundle --version)"
+
+# Run database migrations before starting
+if [ "${DISABLE_DATABASE_MIGRATE}" != "true" ]; then
+  echo "---> Running database migrations..."
+  bundle exec rake db:migrate RAILS_ENV=${RAILS_ENV:-production}
+fi
+
+# Puma 6.5+ configuration
+# WEB_CONCURRENCY and RAILS_MAX_THREADS are the standard env vars
+exec bundle exec puma \
+  --bind "tcp://0.0.0.0:${PORT:-8080}" \
+  --workers "${WEB_CONCURRENCY:-2}" \
+  --threads "${RAILS_MIN_THREADS:-0}:${RAILS_MAX_THREADS:-5}" \
+  -e "${RAILS_ENV:-production}"
